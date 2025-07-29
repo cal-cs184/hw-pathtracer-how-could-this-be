@@ -34,6 +34,13 @@
           <quadratic_attenuation>0.001599967</quadratic_attenuation>
         </point>
       </technique_common>
+      <extra>
+        <technique profile="CGL">
+          <area>
+            <color sid="color">10 10 10</color>
+          </area>
+        </technique>
+      </extra>
     </light>
   </library_lights>
   <library_images/>

@@ -13,9 +13,37 @@ bool BBox::intersect(const Ray& r, double& t0, double& t1) const {
   // Implement ray - bounding box intersection test
   // If the ray intersected the bouding box within the range given by
   // t0, t1, update t0 and t1 with the new intersection times.
+    double tmin = (min.x - r.o.x) / r.d.x;
+    double tmax = (max.x - r.o.x) / r.d.x;
+    if (r.d.x < 0) std::swap(tmin, tmax);
 
+    double tymin = (min.y - r.o.y) / r.d.y;
+    double tymax = (max.y - r.o.y) / r.d.y;
+    if (r.d.y < 0) std::swap(tymin, tymax);
 
-  return true;
+    if ((tmin > tymax) || (tymin > tmax))
+        return false;
+
+    if (tymin > tmin) tmin = tymin;
+    if (tymax < tmax) tmax = tymax;
+
+    double tzmin = (min.z - r.o.z) / r.d.z;
+    double tzmax = (max.z - r.o.z) / r.d.z;
+    if (r.d.z < 0) std::swap(tzmin, tzmax);
+
+    if ((tmin > tzmax) || (tzmin > tmax))
+        return false;
+
+    if (tzmin > tmin) tmin = tzmin;
+    if (tzmax < tmax) tmax = tzmax;
+
+    if (tmax >= r.min_t && tmin <= r.max_t) {
+        t0 = std::max(tmin, r.min_t);
+        t1 = std::min(tmax, r.max_t);
+        return true;
+    }
+
+    return false;
 
 }
 

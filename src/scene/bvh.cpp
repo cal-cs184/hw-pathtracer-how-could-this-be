@@ -58,20 +58,50 @@ BVHNode *BVHAccel::construct_bvh(std::vector<Primitive *>::iterator start,
   // single leaf node (which is also the root) that encloses all the
   // primitives.
 
+  // get longest axis
+  // sort into two halves
+  // call on left and right
+    size_t n = end - start;
+    BBox bbox;
+    std::vector<Vector3D> centroids;
 
-  BBox bbox;
+    for (auto it = start; it != end; ++it) {
+        BBox bb = (*it)->get_bbox();
+        bbox.expand(bb);
+        centroids.push_back(bb.centroid());
+    }
 
-  for (auto p = start; p != end; p++) {
-    BBox bb = (*p)->get_bbox();
-    bbox.expand(bb);
-  }
+    if (n <= max_leaf_size) {
+        BVHNode* leaf = new BVHNode(bbox);
+        leaf->start = start;
+        leaf->end = end;
+        leaf->l = nullptr;
+        leaf->r = nullptr;
+        return leaf;
+    }
 
-  BVHNode *node = new BVHNode(bbox);
-  node->start = start;
-  node->end = end;
+    // Compute bounding box of centroids to choose axis
+    BBox centroid_bbox;
+    for (const auto& c : centroids)
+        centroid_bbox.expand(c);
 
-  return node;
+    Vector3D extent = centroid_bbox.extent;
+    int axis = 0;
+    if (extent.y > extent.x) axis = 1;
+    if (extent.z > extent[axis]) axis = 2;
 
+    // Sort by centroid along the chosen axis using lamdba function defining comparison
+    std::sort(start, end, [axis](Primitive* a, Primitive* b) {
+        return a->get_bbox().centroid()[axis] < b->get_bbox().centroid()[axis];
+    });
+
+    auto mid = start + n / 2;
+    BVHNode* node = new BVHNode(bbox);
+    node->l = construct_bvh(start, mid, max_leaf_size);
+    node->r = construct_bvh(mid, end, max_leaf_size);
+    node->start = start;
+    node->end = end;
+    return node;
 
 }
 
@@ -81,32 +111,69 @@ bool BVHAccel::has_intersection(const Ray &ray, BVHNode *node) const {
   // Take note that this function has a short-circuit that the
   // Intersection version cannot, since it returns as soon as it finds
   // a hit, it doesn't actually have to find the closest hit.
+    bool hit = false;
+
+    if (!node) return false;
+
+    if (node->l == nullptr && node->r == nullptr) { // Leaf node
+        for (auto p = node->start; p != node->end; ++p) {
+            if ((*p)->has_intersection(ray))
+                return true;
+        }
+        return false;
+    }
+
+    // Internal node
+    double t0_l = 0, t1_l = EPS_F;
+    double t0_r = 0, t1_r = EPS_F;
+    bool hit_l = node->l && node->l->bb.intersect(ray, t0_l, t1_l);
+    bool hit_r = node->r && node->r->bb.intersect(ray, t0_r, t1_r);
 
 
+    if (hit_l)
+        hit = has_intersection(ray, node->l) || hit;
+    if (hit_r)
+        hit = has_intersection(ray, node->r) || hit;
 
-  for (auto p : primitives) {
-    total_isects++;
-    if (p->has_intersection(ray))
-      return true;
-  }
-  return false;
-
+    return hit;
 
 }
 
 bool BVHAccel::intersect(const Ray &ray, Intersection *i, BVHNode *node) const {
   // TODO (Part 2.3):
   // Fill in the intersect function.
+  //    bool hit = false;
+  //for (auto p : primitives) {
+  //  total_isects++;
+  //  hit = p->intersect(ray, i) || hit;
+  //}
+  //return hit;
+
+    bool hit = false;
+
+    if (!node) return false;
+
+    if (node->l == nullptr && node->r == nullptr) { // Leaf node
+        for (auto p = node->start; p != node->end; ++p) {
+            total_isects++;
+            hit = (*p)->intersect(ray, i) || hit;
+        }
+        return hit;
+    }
+
+    // Internal node
+    double t0_l = 0, t1_l = EPS_F;
+    double t0_r = 0, t1_r = EPS_F;
+    bool hit_l = node->l && node->l->bb.intersect(ray, t0_l, t1_l);
+    bool hit_r = node->r && node->r->bb.intersect(ray, t0_r, t1_r);
 
 
+    if (hit_l) 
+        hit = intersect(ray, i, node->l) || hit;
+    if (hit_r) 
+        hit = intersect(ray, i, node->r) || hit;
 
-  bool hit = false;
-  for (auto p : primitives) {
-    total_isects++;
-    hit = p->intersect(ray, i) || hit;
-  }
-  return hit;
-
+    return hit;
 
 }
 

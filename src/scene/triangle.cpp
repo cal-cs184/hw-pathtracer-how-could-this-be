@@ -27,9 +27,24 @@ bool Triangle::has_intersection(const Ray &r) const {
   // The difference between this function and the next function is that the next
   // function records the "intersection" while this function only tests whether
   // there is a intersection.
+  
+  // Moller-Trumbore Algorithm
+	Vector3D E1 = p2 - p1;
+	Vector3D E2 = p3 - p1;
+	Vector3D S = r.o - p1;
+	Vector3D S1 = cross(r.d, E2);
+	Vector3D S2 = cross(S, E1);
 
+	Vector3D result = 1.0 / dot(S1, E1) * Vector3D(dot(S2, E2), dot(S1, S), dot(S2, r.d));
 
-  return true;
+	float t = result.x;
+	float b1 = result.y;
+	float b2 = result.z;
+	float b0 = 1.0 - b1 - b2;
+
+	bool check = t >= r.min_t && t <= r.max_t && b0 >= 0 && b0 <= 1 && b1 >= 0 && b1 <= 1 && b2 >= 0 && b2 <= 1;
+
+	return check;
 
 }
 
@@ -38,9 +53,37 @@ bool Triangle::intersect(const Ray &r, Intersection *isect) const {
   // implement ray-triangle intersection. When an intersection takes
   // place, the Intersection data should be updated accordingly
 
+  // Moller-Trumbore Algorithm
+  Vector3D E1 = p2 - p1;
+  Vector3D E2 = p3 - p1;
+  Vector3D S = r.o - p1;
+  Vector3D S1 = cross(r.d, E2);
+  Vector3D S2 = cross(S, E1);
 
-  return true;
+  double divisor = dot(S1, E1);
+  if (fabs(divisor) < EPS_F) return false; // or EPS_F
+  Vector3D result = (1.0 / divisor) * Vector3D(dot(S2, E2), dot(S1, S), dot(S2, r.d));
 
+  float t = result.x;
+  float b1 = result.y;
+  float b2 = result.z;
+  float b0 = 1.0 - b1 - b2;
+
+  bool check = t >= r.min_t && t <= isect->t && b0 >= 0 && b0 <= 1 && b1 >= 0 && b1 <= 1 && b2 >= 0 && b2 <= 1;
+
+  if (check) {
+	  //r.max_t = result.x; const
+	  isect->t = result.x;
+	  float a1 = 1.0 - result.y - result.z;
+	  float a2 = result.y;
+	  float a3 = result.z;
+	  isect->n = a1 * n1 + a2 * n2 + a3 * n3;
+	  isect->n /= isect->n.norm();
+	  isect->primitive = this;
+	  isect->bsdf = get_bsdf();
+  }
+
+  return check;
 
 }
 
