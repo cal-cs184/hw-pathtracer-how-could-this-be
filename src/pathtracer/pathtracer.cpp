@@ -173,34 +173,27 @@ Vector3D PathTracer::one_bounce_radiance(const Ray& r,
     return direct;
 }
 
-Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
-                                                  const Intersection &isect) {
+Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r, const Intersection &isect) {
     Vector3D L_out;
-    // Russian Roulette termination probability
-    if (r.depth >= max_ray_depth || (r.depth > 0 && coin_flip(0.6)))
+
+    if (r.depth >= max_ray_depth - 1) {
+        L_out = estimate_direct_lighting_importance(r, isect);
         return L_out;
-    // Direct illumination (one bounce)
-    L_out = estimate_direct_lighting_importance(r, isect);
+    }
 
+    //double rr_prob = 0.6;
+    //if (r.depth > 0 && coin_flip(rr_prob)) return L_out;
 
-    Vector3D w_out; // outgoing direction in local space
-    Matrix3x3 o2w;
-    make_coord_space(o2w, isect.n);
+    // Sample BSDF
+    Matrix3x3 o2w; make_coord_space(o2w, isect.n);
     Matrix3x3 w2o = o2w.T();
-    w_out = w2o * (-r.d);
+    Vector3D w_out = w2o * (-r.d);
 
-    Vector3D wi; // sampled direction in local space
-    double pdf;
+    Vector3D wi; double pdf;
     Vector3D f = isect.bsdf->sample_f(w_out, &wi, &pdf);
+    if (pdf < EPS_F || f == Vector3D()) return L_out;
 
-    if (pdf < EPS_F || f == Vector3D())
-        return L_out;
-
-    // Convert sampled direction to world space
-    Vector3D wi_world = o2w * wi;
-    wi_world.normalize();
-
-    // Spawn new ray
+    Vector3D wi_world = o2w * wi; wi_world.normalize();
     Ray bounce_ray(isect.t * r.d + r.o, wi_world, INF_F, r.depth + 1);
     bounce_ray.min_t = EPS_F;
 
@@ -208,12 +201,12 @@ Vector3D PathTracer::at_least_one_bounce_radiance(const Ray &r,
     if (bvh->intersect(bounce_ray, &bounce_isect)) {
         double cos_theta = std::max(wi.z, 0.0);
         Vector3D indirect = at_least_one_bounce_radiance(bounce_ray, bounce_isect);
+        //indirect /= rr_prob; // scale up surviving rays
         if (isAccumBounces)
-            L_out += f * indirect * cos_theta / pdf;
+            L_out = f * indirect * cos_theta / pdf + estimate_direct_lighting_importance(r, isect);
         else
-			L_out = f * indirect * cos_theta / pdf; // No accumulation, just one bounce
+			L_out = f * indirect * cos_theta / pdf; // only indirect lighting
     }
-
     return L_out;
 }
 
@@ -233,7 +226,12 @@ Vector3D PathTracer::est_radiance_global_illumination(const Ray &r) {
   if (!bvh->intersect(r, &isect))
     return envLight ? envLight->sample_dir(r) : L_out;
 
-  L_out = PathTracer::at_least_one_bounce_radiance(r, isect) + zero_bounce_radiance(r, isect);
+  if (isAccumBounces)
+    L_out = PathTracer::at_least_one_bounce_radiance(r, isect) + zero_bounce_radiance(r, isect);
+  else if (max_ray_depth > 0)
+	L_out = PathTracer::at_least_one_bounce_radiance(r, isect);
+  else 
+	L_out = zero_bounce_radiance(r, isect);
   //L_out = (isect.t == INF_D) ? debug_shading(r.d) : normal_shading(isect.n);
 
   // TODO (Part 3): Return the direct illumination.
